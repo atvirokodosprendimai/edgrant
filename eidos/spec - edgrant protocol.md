@@ -82,6 +82,20 @@ EdProof is the passport. EdGrant is the visa.
 
 EdGrant composes with EdProof. Neither protocol knows the other's internals. Identity (EdProof) + permission (EdGrant) = authenticated, authorized access.
 
+### Canonical Serialization
+
+- All signed payloads MUST be serialized in a canonical form: sorted keys, no whitespace, UTF-8, no trailing newline
+- Strict subset of JCS (RFC 8785) — implementations MAY use a JCS library
+- Without this, different SDKs produce different byte sequences for the same logical payload, breaking cross-implementation signature verification
+- {>> especially critical in agent ecosystems where multiple tool chains serialize the same intent}
+
+### Replay Protection
+
+- Every request carries a `request_id` (UUID v4) and `created_at` timestamp, both covered by the signature
+- Resource owner rejects duplicate request IDs and requests older than a freshness window (recommended: 5 minutes)
+- Duplicate requests within the freshness window return the same grant (idempotent issuance) — making agent retries safe
+- {>> agents and HTTP clients retry by default — without this, intercepted or retried requests cause duplicate grants}
+
 ### Signature Namespaces
 
 - Signatures use the sshsig wire format with protocol-specific namespaces

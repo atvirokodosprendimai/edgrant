@@ -48,6 +48,7 @@ A formally verified Tamarin model covers the grant exchange.
 - [5. Phase 1 — Request](#5-phase-1--request)
   - [5.1. Request Format](#51-request-format)
   - [5.2. Request Signature](#52-request-signature)
+  - [5.3. Canonical Serialization](#53-canonical-serialization)
 - [6. Phase 2 — Grant](#6-phase-2--grant)
   - [6.1. Policy Evaluation](#61-policy-evaluation)
   - [6.2. Grant Issuance](#62-grant-issuance)
@@ -65,6 +66,7 @@ A formally verified Tamarin model covers the grant exchange.
   - [10.1. Threat Model](#101-threat-model)
   - [10.2. Scope Escalation](#102-scope-escalation)
   - [10.3. Token Lifetime](#103-token-lifetime)
+  - [10.4. Replay Protection](#104-replay-protection)
 - [11. Formal Verification](#11-formal-verification)
 - [12. Legacy Resource Adaptation](#12-legacy-resource-adaptation)
 - [13. Relationship to Other Standards](#13-relationship-to-other-standards)
@@ -313,15 +315,21 @@ The requestor constructs a grant request:
 
 ```json
 {
+  "request_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "requestor_fingerprint": "SHA256:abc1...",
   "resource": "gyros://board/project-alpha",
   "scopes": ["read"],
   "ttl": "1h",
+  "created_at": "2026-03-28T08:58:00Z",
   "reason": "Fetch task statuses for deploy summary report",
   "requestor_public_key": "ssh-ed25519 AAAAC3...",
   "signature": "AAAAB3NzaC1lZDI1NTE5..."
 }
 ```
+
+**`request_id`** — unique identifier for this request (UUID v4).
+Used for replay detection and idempotent grant issuance. The resource
+owner MUST reject requests with a previously seen `request_id`.
 
 **`requestor_fingerprint`** — SHA-256 fingerprint of the requestor's
 Ed25519 public key. Matches the EdProof credential.
@@ -335,22 +343,70 @@ minimum scopes needed.
 **`ttl`** — requested time-to-live. MUST NOT exceed the resource's
 `max_ttl`. The requestor SHOULD request the minimum TTL needed.
 
+**`created_at`** — ISO 8601 timestamp of when the request was
+constructed. The resource owner SHOULD reject requests older than a
+freshness window (RECOMMENDED: 5 minutes). This limits the replay
+window for intercepted requests.
+
 **`reason`** — human-readable reason for the request. RECOMMENDED for
 audit purposes.
 
 ### 5.2. Request Signature
 
-The requestor signs the request using the SSH `sshsig` wire format
-with namespace `edgrant-request`:
+The requestor signs the **canonical serialization** (see §5.3) of the
+request payload using the SSH `sshsig` wire format with namespace
+`edgrant-request`:
 
 ```bash
-echo -n "${RESOURCE}${SCOPES}${TTL}" > /tmp/req
-ssh-keygen -Y sign -f identity -n edgrant-request /tmp/req
+# Canonical payload: sorted keys, no whitespace, UTF-8
+CANONICAL='{"created_at":"2026-03-28T08:58:00Z","reason":"Fetch task statuses for deploy summary report","request_id":"f47ac10b-58cc-4372-a567-0e02b2c3d479","requestor_fingerprint":"SHA256:abc1...","resource":"gyros://board/project-alpha","scopes":["read"],"ttl":"1h"}'
+echo -n "${CANONICAL}" | ssh-keygen -Y sign -f identity -n edgrant-request
 ```
 
 The namespace `edgrant-request` binds the signature to this protocol
 phase. It cannot be replayed as a grant signature or an EdProof
 attestation signature.
+
+The signature covers the full request payload including `request_id`
+and `created_at`, binding replay protection to the cryptographic
+proof.
+
+### 5.3. Canonical Serialization
+
+All signed payloads in EdGrant (requests and grants) MUST be
+serialized in a canonical form before signing and verification.
+
+The canonical form is:
+
+1. **JSON encoding** — the payload is a single JSON object
+2. **Sorted keys** — object keys are sorted lexicographically by
+   Unicode code point at every nesting level
+3. **No insignificant whitespace** — no spaces after colons or commas,
+   no newlines or indentation
+4. **UTF-8 encoding** — the serialized JSON is encoded as UTF-8 with
+   no BOM
+5. **No trailing newline** — the byte sequence ends with the closing
+   `}`
+6. **Array order preserved** — arrays (e.g. `scopes`) maintain their
+   original order; elements are not sorted
+7. **Numbers as integers or decimals** — no exponent notation, no
+   leading zeros, no trailing zeros after decimal point
+8. **No duplicate keys** — each key appears exactly once per object
+
+This is a strict subset of JSON Canonicalization Scheme (JCS,
+RFC 8785). Implementations MAY use a JCS library. Implementations
+that hand-build the canonical form MUST produce byte-identical output
+to a conforming JCS implementation for the same input.
+
+The signature is computed over the raw bytes of the canonical JSON
+string. The verifier reconstructs the canonical form from the received
+payload and verifies the signature against those bytes.
+
+**Rationale**: Without canonical serialization, different
+implementations will produce different byte sequences for the same
+logical payload, causing signature verification failures across
+SDK boundaries. This is especially critical in agent ecosystems where
+multiple tool chains serialize the same intent.
 
 ---
 
@@ -588,6 +644,41 @@ Capability tokens SHOULD have short lifetimes. Recommended ranges:
 | Batch job (pipeline, ETL) | 1-6 hours |
 | Continuous monitoring (dashboards) | 12-24 hours |
 | Standing access | Not recommended — use repeated short grants |
+
+### 10.4. Replay Protection
+
+Grant requests include a `request_id` (UUID v4) and a `created_at`
+timestamp. Together these provide replay protection:
+
+**Request ID uniqueness.** The resource owner MUST track seen
+`request_id` values and reject duplicates. The tracking window MUST
+be at least as long as the freshness window (see below). After the
+freshness window expires, the `request_id` MAY be forgotten — a
+replayed request with an expired `created_at` will be rejected on
+timestamp grounds.
+
+**Timestamp freshness.** The resource owner SHOULD reject requests
+where `created_at` is more than 5 minutes in the past (RECOMMENDED
+freshness window). This limits the useful lifetime of an intercepted
+request. Clock skew between requestor and resource owner SHOULD be
+accommodated by accepting timestamps up to 30 seconds in the future.
+
+**Idempotent grant issuance.** If a resource owner receives a
+duplicate `request_id` within the freshness window and has already
+issued a grant for that request, it SHOULD return the same grant
+rather than issuing a new one. This makes retries safe — agent tool
+chains that retry on timeout will not cause duplicate grants.
+
+**Signature binding.** Both `request_id` and `created_at` are
+included in the signed payload (§5.2, §5.3). An attacker cannot
+modify these fields without invalidating the signature.
+
+**Rationale**: Agent tool chains and HTTP clients retry by default.
+Without replay protection, a single grant request can be replayed by
+an intermediary or re-sent by a retrying client, potentially causing
+duplicate grants or confusing policy evaluation. The `request_id` +
+`created_at` combination provides both deduplication and temporal
+bounds.
 
 ---
 

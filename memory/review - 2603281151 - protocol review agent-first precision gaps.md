@@ -21,15 +21,13 @@ category: core
 
 If signed content is not canonically defined, implementations will drift. Different SDKs and wrappers will serialize the same intent differently, and agent ecosystems multiply that problem fast. Exact canonical serialization needs to be defined, not implied.
 
-**Status:** Open
-**Action:** Define canonical JSON serialization for request and grant payloads (key ordering, encoding, whitespace rules). Consider JCS (RFC 8785) or a simpler deterministic format.
+**Resolved:** Added RFC §5.3 Canonical Serialization — sorted keys, no whitespace, UTF-8, no trailing newline, array order preserved. Defined as strict subset of JCS (RFC 8785). Updated eidos protocol spec.
 
 ### 2. Replay and Retry Resistance — HIGH
 
 Agents and tool chains retry by default. Access requests need built-in replay resistance: request IDs, timestamps, and tight expiration semantics. Otherwise approval flows and grant issuance will get weird fast.
 
-**Status:** Open
-**Action:** Add nonce/request_id to request format, define idempotency semantics for grant issuance, specify timestamp freshness window.
+**Resolved:** Added `request_id` (UUID v4) and `created_at` to request format. Added RFC §10.4 Replay Protection — request ID deduplication, 5-minute freshness window, idempotent grant issuance for retries. Both fields covered by signature. Updated eidos protocol spec.
 
 ### 3. Discovery Boundaries — MEDIUM
 
@@ -56,8 +54,8 @@ The core RFC should stay small, but there should be a companion document definin
 
 | # | Finding | Severity | Status |
 |---|---------|----------|--------|
-| 1 | Canonical serialization | HIGH | Open |
-| 2 | Replay/retry resistance | HIGH | Open |
+| 1 | Canonical serialization | HIGH | **Resolved** |
+| 2 | Replay/retry resistance | HIGH | **Resolved** |
 | 3 | Discovery boundaries | MEDIUM | Open |
 | 4 | Scope semantics | MEDIUM | Open |
 | 5 | Enforcement profile | MEDIUM | Open |
