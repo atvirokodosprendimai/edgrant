@@ -1,27 +1,37 @@
-# This is the seed for your specifications
+# EdGrant — Permission Grant Protocol for EdProof Identities
 
-The main idea:
-- You can create code from intent (prompts)
-- You can extract intent from code (=>docs)
-- Eidos helps you keep intent (spec docs) and manifestation (code) in sync
-- Eidos lets you work more on the intent layer (edit specs)
+Scoped, time-limited, auditable access grants. Built on EdProof identity.
 
-Run `/eidos:help` for more info.
+## Core Idea
 
-## New Projects
+EdProof is the passport — long-lived identity. EdGrant is the visa — temporal permission.
 
-Replace the content of this file with all your project relevant notes.
-Then tell claude to run `/eidos:spec` on it.
-Take a look at the generated files.
-And leave inline comments using `{{double curly braces}}`.
-Just write casually on what should be changed, or what general thoughts you have.
-Then run `/eidos:refine` to have the ai process and group them.
-It may ask you more questions, which you can answer.
-You may end up creating a `/eidos:plan` to start making larger spec edits, or start to implement things.
-You can also use `/eidos:reference` to write docs on knowledge that is relevant to your project, but not in its control.
+A requestor discovers what a resource accepts, requests specific permissions for a specific duration, and the resource owner decides. The requestor carries the grant as a capability token — verified locally, no issuer contacted.
 
-## Existing Projects
+## Protocol Entities
 
-If you have any notes you want to incorporate, see the point above.
-Otherwise try out `/eidos:pull` to extract a base specification from your existing code.
-Read it through, and then either edit directly or leave `{{comments}}` to `/eidos:refine` with LLM support.
+Two entities only: **requestor** and **resource owner**. Any additional approval chain (bot owner, risk engine) is the resource owner's policy concern, not protocol.
+
+## Protocol Phases
+
+0. **Discovery** — requestor approaches with identity only, resource describes what it accepts
+1. **Request** — requestor signs a request for specific scopes and TTL
+2. **Grant** — resource owner evaluates policy, issues capability token
+3. **Access** — requestor presents identity + token, resource verifies locally
+
+## Key Design Decisions
+
+- Scopes are domain-specific and opaque to the protocol
+- No permanent grants — everything has a TTL
+- Revocation is a registry concern (same as EdProof identity revocation)
+- Namespace-separated signatures prevent cross-protocol replay
+- Formally verified in Tamarin (7 lemmas, Dolev-Yao adversary)
+
+## Specs
+
+- `spec - edgrant protocol.md` — core protocol specification
+- `spec - permission grant use cases.md` — concrete scenarios (Jira, Grafana, CI/CD, data stores)
+
+## Status
+
+RFC v0.1 complete. Formal model verified. No reference implementation yet.
