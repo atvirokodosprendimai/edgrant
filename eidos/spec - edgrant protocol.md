@@ -115,6 +115,6 @@ EdGrant composes with EdProof. Neither protocol knows the other's internals. Ide
 
 > [[RFC-EDGRANT.md]]
 > [[formal/edgrant.spthy]]
-> [[spec - permission grant use cases.md]]
+> [[eidos/spec - permission grant use cases.md]]
 > [[brainstorm - 2603271651 - edproof permission grants for bots and services.md]]
 > [[research - 2603271704 - prior art for permission grant protocol.md]]
