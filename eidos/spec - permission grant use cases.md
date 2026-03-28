@@ -1,5 +1,5 @@
 ---
-tldr: Concrete use cases for EdProof-based dynamic permission grants — who requests, who approves, what scope, what TTL
+tldr: Concrete use cases for EdGrant permission grants — who requests, who approves, what scope, what TTL
 category: use-cases
 ---
 
@@ -7,17 +7,18 @@ category: use-cases
 
 ## Target
 
-Concrete scenarios showing how bots and services use EdProof identity to request, receive, and exercise time-limited, scoped permissions to specific resources. Each use case describes the actors, the request, the approval chain, the access pattern, and the audit trail.
+Concrete scenarios showing how requestors (bots, agents, services) use EdGrant to request, receive, and exercise time-limited, scoped permissions to specific resources. Each use case describes the actors, the request, the approval chain, the access pattern, and the audit trail.
 
 ## Prerequisites
 
 Every use case assumes:
-- The bot has an EdProof identity (Ed25519 key pair, attested credential) — stable, long-lived
+- The requestor (bot, agent, or service) has an EdProof identity (Ed25519 key pair, attested credential) — stable, long-lived
 - The resource owner has an EdProof identity
 - Permission grants are separate artifacts from identity credentials — a "visa" alongside the "passport"
 - The **resource owner decides** whether to grant access — this is the only protocol-level requirement
-- The resource owner's policy MAY require bot owner approval, additional evidence, or risk assessment — but this is the resource owner's concern, not the protocol's
-- The protocol has two entities: bot and resource owner. Bot owner is a policy concept, not a protocol entity
+- The resource owner's policy MAY require requestor's owner approval, additional evidence, or risk assessment — but this is the resource owner's concern, not the protocol's
+- The protocol has two entities: requestor and resource owner. The requestor's owner (e.g. bot owner) is a policy concept, not a protocol entity
+- Use cases below use "bot" as the concrete requestor — the protocol generalises to any entity with an EdProof credential
 
 ## Model
 
@@ -26,53 +27,38 @@ Every use case assumes:
 The bot does not pre-know a resource's permission model. It **discovers requirements by trying**. The resource rejects the first attempt and tells the bot what to ask for — the bot learns, then applies.
 
 ```
-Bot                    Bot Owner              Resource Owner         Resource
- │                        │                        │                    │
- │ ─ ─ ─ ─ ─ ─  PHASE 0: DISCOVERY  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
- │                        │                        │                    │
- │── "let me in" ───────────────────────────────────────────────────►│
- │   (identity credential │                        │                    │
- │    only, no grant)      │                        │                    │
- │                        │                        │                    │
- │◄──────────────────────────────────────────── 401 + requirements ──│
- │   { available_scopes:  │                        │   "here's what     │
- │     [read, write:filter,│                       │    I accept"       │
- │      write:task, admin],│                        │                    │
- │     max_ttl: "24h",    │                        │                    │
- │     approval_endpoint: │                        │                    │
- │       "...",           │                        │                    │
- │     grant_format: "..."│                        │                    │
- │   }                    │                        │                    │
- │                        │                        │                    │
- │ ─ ─ ─ ─ ─ ─  PHASE 1: REQUEST  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
- │                        │                        │                    │
- │── permission request ─►│                        │                    │
- │   (resource, scopes,   │                        │                    │
- │    TTL, identity proof) │                        │                    │
- │   (scopes chosen from  │                        │                    │
- │    discovery response)  │                        │                    │
- │                        │                        │                    │
- │ ─ ─ ─ ─ ─ ─  PHASE 2: APPROVAL  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
- │                        │                        │                    │
- │                        │── approved request ───►│                    │
- │                        │   (+ bot owner sig)     │                    │
- │                        │                        │── grant ──────────►│
- │◄── capability token ───┤◄───────────────────────┤  (registered)      │
- │   (dual-signed, scoped, │                        │                    │
- │    time-limited)        │                        │                    │
- │                        │                        │                    │
- │ ─ ─ ─ ─ ─ ─  PHASE 3: ACCESS  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
- │                        │                        │                    │
- │── access request ─────────────────────────────────────────────────►│
- │   (identity credential │                        │                    │
- │    + capability token)  │                        │                    │
- │                        │                        │     verify identity │
- │                        │                        │     verify grant    │
- │                        │                        │     check TTL      │
- │                        │                        │     check revocation│
- │                        │                        │     apply policy    │
- │◄─────────────────────────────────────────────────── scoped response │
+Requestor (Bot)                          Resource Owner / Resource
+ │                                          │
+ │── Phase 0: Discovery ──────────────────►│
+ │   (EdProof credential, no grant)         │
+ │◄──────────── 401 + Requirements ─────────│
+ │   (available scopes, max TTL,            │
+ │    approval endpoint, grant format)      │
+ │                                          │
+ │── Phase 1: Request ────────────────────►│
+ │   (resource, scopes, TTL, reason,        │
+ │    signed with requestor's key)          │
+ │                                          │
+ │             [policy evaluation]           │
+ │             (resource owner MAY require   │
+ │              bot owner co-approval,       │
+ │              risk assessment, etc.)       │
+ │                                          │
+ │◄──────────── Phase 2: Grant ─────────────│
+ │   (capability token, encrypted)          │
+ │                                          │
+ │── Phase 3: Access ─────────────────────►│
+ │   (EdProof credential +                  │
+ │    capability token)                     │
+ │                      verify identity      │
+ │                      verify grant         │
+ │                      check TTL            │
+ │                      check revocation     │
+ │                      apply policy         │
+ │◄────────────── scoped response ──────────│
 ```
+
+> **Note:** The diagram shows the two protocol entities (requestor and resource owner). Bot owner approval, if required, happens inside the resource owner's policy evaluation — it is not a protocol-level step. See [RFC-EDGRANT.md §6.1](RFC-EDGRANT.md) for policy evaluation details.
 
 ### Phase 0: Discovery
 
@@ -101,7 +87,7 @@ After discovery, the bot constructs a request using what the resource told it. T
 
 For resources that don't support EdProof natively, the resource owner may implement a sidecar/proxy that sits in front of their resource. The sidecar handles discovery, verification, and proxying. This is the resource owner's implementation concern — not part of EdProof.
 
-> **RFC opportunity**: The permission request → approval → grant → access flow described in these use cases could become its own RFC (e.g., RFC-EDGRANT), built on EdProof identity as its foundation. EdProof stays identity-only; the grant protocol is a separate specification.
+> **RFC status**: These use cases informed [RFC-EDGRANT.md](RFC-EDGRANT.md), the formal permission grant protocol specification. EdProof stays identity-only; EdGrant is the separate grant protocol.
 
 ---
 
@@ -503,6 +489,6 @@ Every use case follows these principles:
 
 ## Mapping
 
-> [[RFC-EDPROOF.md]]
-> [[eidos/spec - edproof protocol.md]]
-> [[memory/brainstorm - 2603271651 - edproof permission grants for bots and services.md]]
+> [[RFC-EDGRANT.md]]
+> [[eidos/spec - edgrant protocol.md]]
+> [[brainstorm - 2603271651 - edproof permission grants for bots and services.md]]
