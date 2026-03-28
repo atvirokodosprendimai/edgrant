@@ -33,22 +33,19 @@ Agents and tool chains retry by default. Access requests need built-in replay re
 
 Discovery is a great usability feature, but for agents it is also an escalation slope. If the system tells an agent what scopes are available and how to request them, the agent may keep asking until something works. Discovery needs policy boundaries, not just convenience.
 
-**Status:** Open
-**Action:** Define rate limiting on discovery, scope visibility controls (resource owner may hide scopes from certain requestors), and request attempt limits.
+**Rejected:** Already covered by design. The resource owner controls the discovery response content — they choose which scopes to advertise to which requestors. Rate limiting is an infrastructure concern (any HTTP endpoint), not a protocol specification. Discovery is OPTIONAL (RFC §4.2). The protocol's answer is "the resource owner owns the decision."
 
 ### 4. Scope Semantics — MEDIUM
 
 Scope names and capabilities need to be tight and machine-friendly. If they are vague, agents will guess. And guessed permissions are how systems quietly rot.
 
-**Status:** Open
-**Action:** Define scope naming conventions, recommend machine-parseable scope structures (not just opaque strings), provide guidance on scope granularity.
+**Rejected:** Cuts against Design Principle #5: "Scopes are domain-specific. There is no central scope registry and no universal scope language." The RFC already defines scope structure as resource + action + constraints (§8.1). Prescribing naming conventions or granularity would turn EdGrant into a scope authority, which it explicitly refuses to be. Vague scopes are the resource owner's problem, not the protocol's.
 
 ### 5. Enforcement Profile — MEDIUM
 
 The core RFC should stay small, but there should be a companion document defining what a resource-owner adapter must do: default deny, exact scope-to-operation mapping, no broad fallback, strict expiry propagation, clear handling of unsupported scopes, and full audit trace from request to backend action. Without that, the protocol can be elegant while deployments turn sloppy.
 
-**Status:** Open
-**Action:** Write a companion spec (or eidos spec) for the enforcement profile — the minimum security contract an adapter must satisfy.
+**Rejected:** The RFC §7.2 already defines the verification contract (6 explicit checks). The sidecar spec defines adapter behaviour (reject operations outside granted scopes, log every proxied operation). A separate enforcement profile doc would mostly restate what's already there. Resource owner sovereignty means the protocol does not prescribe how they enforce — it prescribes what they verify.
 
 ## Summary
 
@@ -56,6 +53,6 @@ The core RFC should stay small, but there should be a companion document definin
 |---|---------|----------|--------|
 | 1 | Canonical serialization | HIGH | **Resolved** |
 | 2 | Replay/retry resistance | HIGH | **Resolved** |
-| 3 | Discovery boundaries | MEDIUM | Open |
-| 4 | Scope semantics | MEDIUM | Open |
-| 5 | Enforcement profile | MEDIUM | Open |
+| 3 | Discovery boundaries | MEDIUM | **Rejected** (by design) |
+| 4 | Scope semantics | MEDIUM | **Rejected** (by design) |
+| 5 | Enforcement profile | MEDIUM | **Rejected** (by design) |
